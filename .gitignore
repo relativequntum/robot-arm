@@ -1,0 +1,56 @@
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# ---- 密钥与本地配置 ----
+.env
+.env.*
+!.env.example
+
+# ---- 本地数据目录（不进 git）----
+# LeRobot 数据集、录像、模型权重、日志、大 STEP/mesh 一律放这里
+# 注意：share-data/ 进 git，勿忽略（小体量样例、配置、标定结果）
+local-data/
+
+# ---- IDE ----
+.idea/
+.vscode/
+# 如需共享调试/任务配置，可单独放开：
+# !.vscode/settings.json
+# !.vscode/launch.json
+
+# ---- 操作系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 大文件：一律不进仓库 ----
+# 官方 STEP 与 mesh（整机 STEP 约 38 MB）不在本仓库留副本，
+# 用链接指向官方仓库 https://github.com/Seeed-Projects/reBot-DevArm
+# （硬件 BOM/STEP：hardware/reBot_B601_RS/；URDF 与 meshes：Rebot_Arm_description/）
+# 需要本地用就下到 local-data/ 下，文档里写清来源链接与版本号。
+*.step
+*.stp
+*.stl
+*.mp4
+*.avi
+*.safetensors
+*.pt
+*.ckpt
+*.h5
+*.npz
+*.bag
+*.mcap
+*.zip
+
+# ---- 日志 ----
+*.log
