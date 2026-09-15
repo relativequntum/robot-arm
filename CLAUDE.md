@@ -2,7 +2,7 @@
 
 > 生效日期 2026-09-15。本文件被每位成员的 Claude Code 自动加载，规则写在这里＝下发给全员的 Claude。
 
-本项目：**Seeed reBot DevArm B601-RS 机械臂的功能开发**。多人协作、单仓库（https://github.com/relativequntum/robot-arm ，private，单 main 分支），每人在本地用 Claude Code 干活，协作全部走 GitHub Issue。
+本项目：**Seeed reBot DevArm B601-RS 机械臂的功能开发**。多人协作、单仓库（https://github.com/relativequntum/robot-arm ，公开仓库，单 main 分支；push 与被指派 issue 需总管邀请为协作者），每人在本地用 Claude Code 干活，协作全部走 GitHub Issue。
 
 ## 必读文档导航
 
@@ -12,7 +12,7 @@
 | 查硬件官方资料（BOM、URDF、SDK、wiki 链接） | `docs/硬件/官方文档索引.md` |
 | 查自己名下的待办 | `docs/看板.md` —— 开放问题看板（机器人自动生成，**禁止手改**） |
 | 查已关闭问题的结论 | `docs/开放问题结论台账.md` |
-| 新成员接入 | `docs/协作者交接文本.md` |
+| 新成员接入 | `docs/协作者交接文本.md`（发群文本见 `docs/接入通知.md`） |
 | 想知道协作模式为什么这么设计 | `gh-issue协同开发模式.md`（跨项目方法论模板，原文保留；示例标签与项目背景来自他项目，不适用本项目；凡与本文件冲突处**一律以本文件为准**） |
 
 ## 模型使用规范
@@ -80,7 +80,7 @@
 ### gh CLI —— 全员标准配置（装一次，Claude Code 就能自动读写 issue）
 
 - 安装：Windows `winget install --id GitHub.cli -e`；macOS `brew install gh`；Ubuntu 见 GitHub CLI 官方安装说明。
-- 装完执行 `gh auth login --web --hostname github.com --git-protocol https`：它是交互式的，会打印一次性 code 并要你按 Enter 打开浏览器，用自己的 GitHub 账号授权（只需一次，顺带把 git 凭据配好，这正是之后能 clone private 仓库的原因）。**登录由本人操作**，两种方式任选：在系统终端（Windows 开 PowerShell / Windows Terminal）执行；或在 Claude Code 输入框里以 `!` 前缀运行同一条命令（`! gh auth login --web --hostname github.com --git-protocol https`，`!` 前缀会把命令交给本会话终端交互执行，输出直接落在会话里）。之后让 Claude 跑 `gh auth status` 验证，显示自己账号即成功。
+- 装完执行 `gh auth login --web --hostname github.com --git-protocol https`：它是交互式的，会打印一次性 code 并要你按 Enter 打开浏览器，用自己的 GitHub 账号授权（只需一次，顺带把 git 凭据配好，这正是之后能 push 的原因）。**登录由本人操作**，两种方式任选：在系统终端（Windows 开 PowerShell / Windows Terminal）执行；或在 Claude Code 输入框里以 `!` 前缀运行同一条命令（`! gh auth login --web --hostname github.com --git-protocol https`，`!` 前缀会把命令交给本会话终端交互执行，输出直接落在会话里）。之后让 Claude 跑 `gh auth status` 验证，显示自己账号即成功。
 - 装好后你的 Claude Code 就能：`gh issue list`、`gh issue view N --comments` 读全文与讨论；`gh issue comment N` 代你回评；（提出方）`gh issue close N` 关闭。看板是离线总览，gh 负责实时细节与回写。
 - **开 issue 的标准命令**（`config.yml` 的 `blank_issues_enabled: false` 只管网页端，gh CLI 会绕过模板强制，所以正文与标签必须自己带全）。**注意 `--template` 只在有 TTY 的交互模式下生效，Claude Code 的 Bash 是非交互 shell，带 `--template` 必报 `must provide --title and --body when not running interactively`，而 `--template` 又与 `--body-file` 互斥——所以 Claude 一律走 `--body-file`**：
 

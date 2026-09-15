@@ -2,7 +2,7 @@
 
 在 Seeed reBot DevArm **B601-RS** 六轴机械臂上做功能开发：多人协作、单仓库、每人本地用 Claude Code 作为开发助手。
 
-> 生效日期：2026-09-15。仓库：https://github.com/relativequntum/robot-arm （private，单 `main` 分支）。
+> 生效日期：2026-09-15。仓库：https://github.com/relativequntum/robot-arm （公开仓库，单 `main` 分支）。
 
 ## 硬件简介
 
@@ -41,7 +41,7 @@
 - **新成员接入**：建一个空文件夹、打开 Claude Code、粘贴属于自己的那段启动文本——见 [`docs/协作者交接文本.md`](docs/协作者交接文本.md)。
 - **结论回填台账**：会签 / 裁决关闭后把一句话结论回填 [`docs/开放问题结论台账.md`](docs/开放问题结论台账.md)（任务类不回填）。
 
-仓库为 private，单 `main` 分支，不建长期分支。
+仓库公开可直接 clone；push 与被指派 issue 需总管邀请为协作者。单 `main` 分支，不建长期分支。
 
 > 后续按需可再引入协作模式模板第三节的两个可选机制：showcase 成果展示页（每模块一条演示命令跑共享样例，全队互见进展）与数据 / 耗材需求清单（清单进 git、数据不进 git）；规则来源见 [`gh-issue协同开发模式.md`](gh-issue协同开发模式.md)。
 
