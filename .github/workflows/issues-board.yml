@@ -1,0 +1,174 @@
+# 看板自动同步：issue 或评论有任何变动时，重建 docs/看板.md 并提交回 main。
+# 归属：项目总管。其他成员不得修改本文件。
+name: issues-board-sync
+
+on:
+  issues:
+  issue_comment:
+  # 每日兜底：安静期（无人开 issue、无人评论）里也要刷新，否则「近 14 天已关闭」不会自然收口、
+  # 「最后同步」会停在几天前，成员会误判成机器人故障。schedule 只在默认分支生效，本项目单 main 正好满足。
+  schedule:
+    - cron: '0 22 * * *'   # UTC 22:00 = 北京 06:00，赶在当天开工前刷新
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: issues-board
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: 确保标签存在（幂等）
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = [
+              ['公共', 'c2e0c6', '公共契约与架构：目录结构、接口约定、根目录治理文件'],
+              ['硬件', '1d76db', '机械臂本体与 CAN 通信、驱动、标定等硬件相关问题'],
+              ['文档', '0e8a16', '文档类：说明、索引、台账、交接文本'],
+              ['会签', 'd93f0b', '多方对齐口径或接口，需全部会签方表态'],
+              ['裁决', 'b60205', '契约变更或纪律解释，相关方可附议，总管（唯一属主）拍板'],
+              ['任务', 'c5def5', '总管向多人下发的执行事项'],
+            ];
+            for (const [name, color, description] of labels) {
+              try {
+                await github.rest.issues.createLabel({ ...context.repo, name, color, description });
+              } catch (e) { if (e.status !== 422) throw e; }
+            }
+
+      - name: 重建看板
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const all = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'all', per_page: 100 });
+            const issues = all.filter(i => !i.pull_request);
+            const now = Date.now();
+            const bj = t => new Date(new Date(t).getTime() + 8 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16);
+            const trunc = (s, n) => { s = (s || '').trim(); return s.length > n ? s.slice(0, n) + '\n…（截断，全文见 issue 链接）' : s; };
+            const labelName = l => typeof l === 'string' ? l : l.name;
+            const MODULES = ['公共', '硬件', '文档'];
+            const open = issues.filter(i => i.state === 'open');
+            const closed14 = issues.filter(i => i.state === 'closed' && i.closed_at && (now - new Date(i.closed_at).getTime()) < 14 * 86400 * 1000);
+            // 协作者登记后在此追加 ['登录名', '姓名 · 角色', '姓名']。
+            // 须与 CLAUDE.md 的「角色、姓名与 GitHub 登录名对照」表同步；登录名先用 gh api users/<login> 核实。
+            // 漏改这里，该成员在「按人待办」里不会有章节，等于收不到任何待办。
+            const MEMBERS = [
+              ['relativequntum', '史静宇 · 项目总管', '史静宇'],
+            ];
+            const NAMES = Object.fromEntries(MEMBERS.map(([l, , n]) => [l, n]));
+            const commentsByIssue = {};
+            for (const i of open) {
+              const cs = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: i.number, per_page: 100, sort: 'created', direction: 'asc' });
+              cs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+              commentsByIssue[i.number] = cs;
+            }
+            const lc = s => (s || '').toLowerCase();
+            const mentionRe = login => new RegExp('@' + login.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z0-9-])', 'i');
+            const personStatus = (i, login) => {
+              const l = login.toLowerCase();
+              const re = mentionRe(login);
+              const cs = commentsByIssue[i.number] || [];
+              const isAuthor = lc(i.user.login) === l;
+              const assigned = i.assignees.some(a => lc(a.login) === l);
+              const mentioned = re.test(i.body || '') || cs.some(c => re.test(c.body || ''));
+              if (!assigned && !mentioned && !isAuthor) return null;
+              const mineTimes = cs.filter(c => lc(c.user.login) === l).map(c => new Date(c.created_at).getTime());
+              if (isAuthor) mineTimes.push(new Date(i.created_at).getTime());
+              const otherTimes = cs.filter(c => lc(c.user.login) !== l).map(c => new Date(c.created_at).getTime());
+              if (!isAuthor) otherTimes.push(new Date(i.created_at).getTime());
+              const mine = Math.max(0, ...mineTimes);
+              const other = Math.max(0, ...otherTimes);
+              if (mine === 0) return '【待你首次回应】';
+              if (other > mine) {
+                const lastC = cs.length ? cs.reduce((a, b) => new Date(b.created_at) > new Date(a.created_at) ? b : a) : null;
+                return '【有新动态待你看，最后发言 @' + (lastC ? lastC.user.login : i.user.login) + '】';
+              }
+              return '【你已回应，等对方】';
+            };
+            const fmt = i => {
+              const ls = i.labels.map(labelName);
+              const assignees = i.assignees.map(a => '@' + a.login + (NAMES[a.login] ? '（' + NAMES[a.login] + '）' : '')).join(' ') || '（未指派）';
+              let md = '#### #' + i.number + ' ' + i.title + '\n';
+              md += '- 链接：' + i.html_url + '\n';
+              md += '- 指派：' + assignees + ' ｜ 标签：' + (ls.join('、') || '无') + ' ｜ 评论：' + i.comments + ' ｜ 更新：' + bj(i.updated_at) + '（北京时间）\n\n';
+              const body = trunc(i.body, 1200);
+              if (body) md += body.split('\n').map(l => '> ' + l).join('\n') + '\n\n';
+              return md;
+            };
+            let md = '# 开放问题看板（自动生成，禁止手改）\n\n';
+            md += '> 本文件由 GitHub Actions 在 issue 或评论变动时自动重建（.github/workflows/issues-board.yml）。\n';
+            md += '> 讨论请进对应 issue；这里只是快照，方便 git pull 后本地阅读。流程规则见 CLAUDE.md。\n';
+            md += '> 用法：每次开工先 git pull，先看「按人待办」里自己登录名下的条目；issue 全文与评论用 `gh issue view N --comments` 读。\n';
+            md += '> 当前开放 ' + open.length + ' 条，近 14 天关闭 ' + closed14.length + ' 条。\n\n';
+            md += '## 按人待办（每次开工先看自己登录名下这一节）\n\n';
+            md += '收录口径：被指派的、正文或评论中被 @ 的、自己提出的开放 issue。\n\n';
+            for (const [login, role] of MEMBERS) {
+              const rows = [];
+              for (const i of open) {
+                const s = personStatus(i, login);
+                if (s) rows.push('- #' + i.number + ' ' + i.title + ' ' + s + ' ' + i.html_url);
+              }
+              md += '### @' + login + '（' + role + '）\n\n';
+              md += rows.length ? rows.join('\n') + '\n\n' : '（当前无相关开放 issue）\n\n';
+            }
+            md += '> 成员A / 成员B / 成员C 登录名 `<待登记>`：名单齐后由总管用 `gh api users/<login>` 核实并回填本 workflow 的 MEMBERS 数组（同时回填 CLAUDE.md 对照表与 docs/协作者交接文本.md）。回填前这些成员不会出现在本节，请直接看下方模块章节。\n\n';
+            // 一条 issue 可能带多个模块标签：全文只在首个命中的模块下渲染一次，
+            // 其余模块下只留一行指针，避免看板体积与 git diff 翻倍、成员误当成两条 issue。
+            const shownAt = {};
+            for (const m of MODULES) {
+              const list = open.filter(i => i.labels.some(l => labelName(l) === m));
+              if (!list.length) continue;
+              md += '## ' + m + '\n\n';
+              for (const i of list) {
+                if (shownAt[i.number]) {
+                  md += '- #' + i.number + ' ' + i.title + ' → 全文见「' + shownAt[i.number] + '」节：' + i.html_url + '\n\n';
+                  continue;
+                }
+                shownAt[i.number] = m;
+                md += fmt(i);
+              }
+            }
+            const untagged = open.filter(i => !i.labels.some(l => MODULES.includes(labelName(l))));
+            if (untagged.length) {
+              md += '## 未打模块标签（提出方请补标签）\n\n';
+              for (const i of untagged) md += fmt(i);
+            }
+            if (closed14.length) {
+              md += '## 近 14 天已关闭\n\n';
+              for (const i of closed14) md += '- [x] #' + i.number + ' ' + i.title + '（' + bj(i.closed_at) + ' 关闭）：' + i.html_url + '\n';
+              md += '\n';
+            }
+            md += '\n---\n\n最后同步：' + bj(now) + '（北京时间）\n';
+            // 只有「最后同步」以外的内容变了才写文件，避免每个 issue/评论事件都产生一次无意义提交
+            const path = 'docs/看板.md';
+            const strip = s => s.replace(/^最后同步：.*$/gm, '').replace(/\s+$/, '');
+            const old = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '';
+            if (strip(old) === strip(md)) {
+              core.info('board unchanged (ignoring timestamp line)');
+            } else {
+              fs.writeFileSync(path, md);
+            }
+
+      - name: 提交回写
+        run: |
+          git config user.name "issues-board-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/看板.md
+          if git diff --cached --quiet; then echo "board unchanged"; exit 0; fi
+          git commit -m "自动同步看板"
+          for i in 1 2 3; do
+            git push && exit 0
+            git pull --rebase origin main
+          done
+          git push
